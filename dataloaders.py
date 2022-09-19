@@ -12,7 +12,7 @@ img_transform_train = transforms.Compose([...])
 
 
 class PosterDataset(torch.utils.data.Dataset):
-    def __init__(self, table_path, img_root_path, img_transform=None,
+    def __init__(self, table_path, img_root_path, img_transform=None, img_in_ram=False,
                  genre=None, genre_logic='and', og_lang=None, year=None, runtime=None,
                  max_num=None, sort=None):
         '''
@@ -20,6 +20,7 @@ class PosterDataset(torch.utils.data.Dataset):
         :param table_path: Path to the table pickle file.
         :param img_root_path: Path to the image folder.
         :param img_transform: Transformation for the images.
+        :param img_in_ram: Whether to already load images into RAM.
         :param genre: A single genre or list of genres.
         :param genre_logic: 'and' or 'or'.
         :param og_lang: A single original language.
@@ -32,6 +33,8 @@ class PosterDataset(torch.utils.data.Dataset):
         self.table = pd.read_pickle(table_path)
         self.img_root_path = img_root_path
         self.img_transform = img_transform
+        self.img_in_ram = img_in_ram
+        self.images = []
 
         ### Prepare Table
         # Genre
@@ -76,7 +79,7 @@ class PosterDataset(torch.utils.data.Dataset):
 
         # Runtime
         if runtime is not None:
-            self.table = self.table.runtime.between(*runtime)
+            self.table = self.table[self.table.runtime.between(*runtime)]
 
         # Cutoff
         if max_num is not None:
@@ -84,11 +87,19 @@ class PosterDataset(torch.utils.data.Dataset):
                 self.table.sort_values(by=sort, ascending=False, inplace=True)
             self.table = self.table.iloc[:max_num]
 
-        ### Image Path
-        self.table['image_path'] = '.' + os.sep + 'data' + os.sep + self.table.id.astype('string') + '.jpg'
-
         ### Reset index to 0,1,2,...
         self.table.reset_index(level=0, inplace=True)
+
+        ### Image Path
+        self.table['image_path'] = self.img_root_path + os.sep + self.table.id.astype('string') + '.jpg'
+
+        ### Load images into RAM; todo: optimize loading and tranforming
+        if self.img_in_ram:
+            for path in self.table.image_path:
+                if self.img_transform is not None:
+                    self.images.append(self.img_transform(pil_loader(path)))
+                else:
+                    self.images.append(pil_loader(path))
 
     def __len__(self):
         return self.table.shape[0]
@@ -97,14 +108,16 @@ class PosterDataset(torch.utils.data.Dataset):
         # if torch.is_tensor(idx):
         #    idx = idx.tolist()
 
-        _, _, _, og_lang, pop, year, runtime, vote_count, _, _, is_thriller, is_horror, is_animation, is_scifi, is_action, \
+        _, _, _, og_lang, pop, _, runtime, vote_count, _, _, is_thriller, is_horror, is_animation, is_scifi, is_action, \
         is_drama, is_fantasy, is_adventure, is_family, is_comedy, is_tv, is_crime, is_mystery, is_war, is_romance, \
-        is_music, is_history, is_docu, is_western, _ = self.table.iloc[[idx]].values.flatten()
-        year = year.year
+        is_music, is_history, is_docu, is_western, year, _ = self.table.iloc[[idx]].values.flatten()
 
-        image = pil_loader(self.table.image_path[idx])
-        if self.img_transform is not None:
-            image = self.img_transform(image)
+        if self.img_in_ram:
+            image = self.images[idx]
+        else:
+            image = pil_loader(self.table.image_path[idx])
+            if self.img_transform is not None:
+                image = self.img_transform(image)
 
         return image, og_lang, pop, year, runtime, vote_count, is_thriller, is_horror, is_animation, is_scifi, is_action, \
                is_drama, is_fantasy, is_adventure, is_family, is_comedy, is_tv, is_crime, is_mystery, is_war, \
