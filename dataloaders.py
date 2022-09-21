@@ -12,7 +12,8 @@ img_transform_train = transforms.Compose([...])
 
 
 class PosterDataset(torch.utils.data.Dataset):
-    def __init__(self, table_path, img_root_path, img_transform=None, img_in_ram=False,
+    def __init__(self, table_path, img_root_path, img_transform=None,
+                 colormode='RGB', img_in_ram=False,
                  genre=None, genre_logic='and', og_lang=None, year=None, runtime=None,
                  max_num=None, sort=None):
         '''
@@ -20,6 +21,7 @@ class PosterDataset(torch.utils.data.Dataset):
         :param table_path: Path to the table pickle file.
         :param img_root_path: Path to the image folder.
         :param img_transform: Transformation for the images.
+        :param colormode: pillow colormode, e.g. "RGB", "LAB", "HSV"
         :param img_in_ram: Whether to already load images into RAM.
         :param genre: A single genre or list of genres.
         :param genre_logic: 'and' or 'or'.
@@ -33,6 +35,7 @@ class PosterDataset(torch.utils.data.Dataset):
         self.table = pd.read_pickle(table_path)
         self.img_root_path = img_root_path
         self.img_transform = img_transform
+        self.colormode = colormode
         self.img_in_ram = img_in_ram
         self.images = []
 
@@ -97,7 +100,7 @@ class PosterDataset(torch.utils.data.Dataset):
         if self.img_in_ram:
             for path in self.table.image_path:
                 if self.img_transform is not None:
-                    self.images.append(self.img_transform(pil_loader(path)))
+                    self.images.append(self.img_transform(pil_loader(path, self.colormode)))
                 else:
                     self.images.append(pil_loader(path))
 
@@ -115,7 +118,7 @@ class PosterDataset(torch.utils.data.Dataset):
         if self.img_in_ram:
             image = self.images[idx]
         else:
-            image = pil_loader(self.table.image_path[idx])
+            image = pil_loader(self.table.image_path[idx], self.colormode)
             if self.img_transform is not None:
                 image = self.img_transform(image)
 
@@ -124,7 +127,7 @@ class PosterDataset(torch.utils.data.Dataset):
                is_romance, is_music, is_history, is_docu, is_western
 
 
-def pil_loader(path: str) -> Image.Image:
+def pil_loader(path: str, colormode="RGB") -> Image.Image:
     with open(path, 'rb') as f:
         img = Image.open(f)
-        return img.convert("RGB")
+        return img.convert(colormode)
