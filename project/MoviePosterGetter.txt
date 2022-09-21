@@ -1,0 +1,107 @@
+With TMDB from the kaggle dataset:
+https://www.kaggle.com/datasets/akshaypawar7/millions-of-movies
+
+Get paths from movies.csv.
+https://www.kaggle.com/code/zeeenb/movies
+
+Append to 
+
+https://image.tmdb.org/t/p/<size>
+
+with <size> from
+
+|  poster  | backdrop |  still   | profile  |   logo   |
+| :------: | :------: | :------: | :------: | :------: |
+| -------- | -------- | -------- |    w45   |    w45   |
+|    w92   | -------- |    w92   | -------- |    w92   |
+|   w154   | -------- | -------- | -------- |   w154   |
+|   w185   | -------- |   w185   |   w185   |   w185   |
+| -------- |   w300   |   w300   | -------- |   w300   |
+|   w342   | -------- | -------- | -------- | -------- |
+|   w500   | -------- | -------- | -------- |   w500   |
+| -------- | -------- | -------- |   h632   | -------- |
+|   w780   |   w780   | -------- | -------- | -------- |
+| -------- |  w1280   | -------- | -------- | -------- |
+| original | original | original | original | original |  
+
+(although other resolutions seem also possible)
+
+and download.
+
+https://developers.themoviedb.org/3/getting-started/images
+
+
+---------------------------------------------------
+
+With TMDB via API:
+https://developers.themoviedb.org/3/getting-started/introduction
+https://pypi.org/project/tmdbv3api/
+
+Use discover request:
+https://developers.themoviedb.org/3/discover/movie-discover
+
+with genres from
+https://developers.themoviedb.org/3/genres/get-movie-list
+
+Which gives max. 10'000 items.
+https://www.themoviedb.org/talk/6196bb4dc0ae3600890b97a3
+https://www.themoviedb.org/talk/5892db39c3a3686d10001a4d
+
+---------------------------------------------------
+
+Note that there are even more posters on tmdb, e.g.
+https://www.themoviedb.org/movie/532639-pinocchio/images/posters?image_language=en
+
+even with the category
+
+no language
+
+https://www.themoviedb.org/movie/532639-pinocchio/images/posters?image_language=xx
+
+---------------------------------------------------
+With Cinemagoer/IMDB
+
+
+import imdb
+
+ia = imdb.Cinemagoer()
+
+### Finding one movie
+
+movies = ia.search_movie('matrix') # return a list of movies with some information
+movieid = movies[0].movieID
+
+movie = ia.get_movie(movieid) # loads all the information about the movie
+
+cover_url = movie['cover url']
+genres = movie['genres']
+
+(All keys: https://cinemagoer.readthedocs.io/en/latest/usage/movie.html?highlight=year#movies )
+
+
+### Working with list of movies
+
+Remember: there is an info=... parameter to get only the info you want.
+
+Potential Workflow:
+From https://www.imdb.com/interfaces/ download title.basics (filter titleType, genre, year) & title.ratings (filter number of votes).
+Extract list of imdb IDs.
+
+
+- There is a function _get_top_movies_or_tv_by_genres in  https://github.com/cinemagoer/cinemagoer/blob/master/imdb/parser/http/__init__.py#L456
+Also there is ia.search_movie_advanced().
+The parser for Top250 w/ genre https://github.com/cinemagoer/cinemagoer/blob/32938951a28dd77257d091548e09e3da64a64026/imdb/parser/http/topBottomParser.py#L37
+
+- Alternative for getting ids is https://www.imdb.com/search/title/ and then scraping the result urls
+
+### Regarding the resolution of the cover:
+
+For example matrix:
+https://m.media-amazon.com/images/M/MV5BNzQzOTk3OTAtNDQ0Zi00ZTVkLWI0MTEtMDllZjNkYzNjNTc4L2ltYWdlXkEyXkFqcGdeQXVyNjU0OTQ0OTY@._V1_SX300.jpg
+https://m.media-amazon.com/images/M/MV5BNzQzOTk3OTAtNDQ0Zi00ZTVkLWI0MTEtMDllZjNkYzNjNTc4L2ltYWdlXkEyXkFqcGdeQXVyNjU0OTQ0OTY@._V1_SX101_CR0,0,101,150_.jpg
+
+Just append ._V1_SX1200.jpg after @ for higher resolution!
+_UX1200.jpg is also possible.
+For full size end with @.jpg
+
+https://github.com/cinemagoer/cinemagoer/blob/master/imdb/helpers.py#L611
