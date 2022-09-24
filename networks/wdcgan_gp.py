@@ -69,7 +69,32 @@ class Discriminator(nn.Module):
                           padding=(1, 1), padding_mode=padding_mode, bias=False),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(base_num_out_channels * 8, 1, kernel_size=(4, 4), stride=(1, 1), bias=False),
-                nn.Conv2d(1, 1, kernel_size=(3, 1), stride=(1, 1), bias=False)
+                nn.Flatten(),
+                nn.Linear(1*3*1, 1)
+            )
+        elif norm_layer_type == "spectral":
+            self.main = nn.Sequential(
+                nn.utils.parametrizations.spectral_norm(
+                    nn.Conv2d(num_img_channels, base_num_out_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1),
+                          padding_mode=padding_mode, bias=False)),
+                nn.LeakyReLU(0.1, inplace=True),
+                nn.utils.parametrizations.spectral_norm(
+                    nn.Conv2d(base_num_out_channels, base_num_out_channels * 2, kernel_size=(4, 4), stride=(2, 2),
+                          padding=(1, 1), padding_mode=padding_mode, bias=False)),
+                nn.LeakyReLU(0.1, inplace=True),
+                nn.utils.parametrizations.spectral_norm(
+                    nn.Conv2d(base_num_out_channels * 2, base_num_out_channels * 4, kernel_size=(4, 4), stride=(2, 2),
+                          padding=(1, 1), padding_mode=padding_mode, bias=False)),
+                nn.LeakyReLU(0.1, inplace=True),
+                nn.utils.parametrizations.spectral_norm(
+                    nn.Conv2d(base_num_out_channels * 4, base_num_out_channels * 8, kernel_size=(4, 4), stride=(2, 2),
+                          padding=(1, 1), padding_mode=padding_mode, bias=False)),
+                nn.LeakyReLU(0.1, inplace=True),
+                nn.utils.parametrizations.spectral_norm(
+                    nn.Conv2d(base_num_out_channels * 8, 1, kernel_size=(4, 4), stride=(1, 1), bias=False)),
+                nn.LeakyReLU(0.1, inplace=True),
+                nn.Flatten(),
+                nn.Linear(1*3*1, 1)
             )
         elif norm_layer_type == "layer":
             self.main = nn.Sequential(
@@ -89,7 +114,8 @@ class Discriminator(nn.Module):
                 nn.LayerNorm([base_num_out_channels * 8, 6, 4]),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(base_num_out_channels * 8, 1, kernel_size=(4, 4), stride=(1, 1), bias=False),
-                nn.Conv2d(1, 1, kernel_size=(3, 1), stride=(1, 1), bias=False)
+                nn.Flatten(),
+                nn.Linear(1 * 3 * 1, 1)
             )
         elif norm_layer_type == "instance":
             self.main = nn.Sequential(
@@ -109,7 +135,8 @@ class Discriminator(nn.Module):
                 nn.InstanceNorm2d(base_num_out_channels * 8, affine=True),
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(base_num_out_channels * 8, 1, kernel_size=(4, 4), stride=(1, 1), bias=False),
-                nn.Conv2d(1, 1, kernel_size=(3, 1), stride=(1, 1), bias=False)
+                nn.Flatten(),
+                nn.Linear(1*3*1, 1)
             )
         else:
             print("This layer norm is not implemented.")
@@ -165,9 +192,12 @@ class Trainer:
                 d_real = discriminator(reals).view(-1)
                 d_fake = discriminator(fakes).view(-1)
 
-                grad_penalty = gradient_penalty(discriminator, reals, fakes, device=device)
+                if self.lambda_gp > 0:
+                    grad_penalty = gradient_penalty(discriminator, reals, fakes, device=device)
+                    d_loss = d_fake.mean() - d_real.mean() + self.lambda_gp * grad_penalty
+                else:
+                    d_loss = d_fake.mean() - d_real.mean()
 
-                d_loss = d_fake.mean() - d_real.mean() + self.lambda_gp * grad_penalty
                 d_loss.backward()
                 self.optimizer_d.step()
 
