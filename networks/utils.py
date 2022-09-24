@@ -48,7 +48,9 @@ def generate_and_save_images(output_dir, generator, epoch, noise, colormode, sho
 
     fig.savefig(output_dir + '/image_at_epoch_{:04d}.png'.format(epoch))
 
-    if not show:
+    if show:
+        plt.show();
+    else:
         plt.close();
 
 

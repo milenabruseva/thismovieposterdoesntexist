@@ -160,7 +160,9 @@ class Trainer:
         plt.ylabel("Loss")
         plt.legend()
         fig.savefig(path.join(out_dir, "training_loss.png"))
-        if not show_graphs:
+        if show_graphs:
+            plt.show();
+        else:
             plt.close();
 
         # Create gif
