@@ -98,7 +98,8 @@ class Trainer:
         self.real_label = 1.
         self.fake_label = 0.
 
-    def train(self, generator, discriminator, dataloader, num_epochs, device, show_graphs=True):
+    def train(self, generator, discriminator, dataloader, num_epochs, device, fake_img_snap,
+              model_snap, show_graphs=True):
 
         out_dir = path.join(self.out_dir, datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
         os.makedirs(out_dir)
@@ -145,8 +146,10 @@ class Trainer:
                 generator_losses.append(g_error.item())
                 discriminator_losses.append(d_error.item())
 
-            utils.generate_and_save_images(out_dir, generator, epoch, self.noise_samples, self.colormode, show_graphs)
-            utils.save_checkpoint(out_dir, generator, self.optimizer_g, discriminator, self.optimizer_d, epoch)
+            if epoch % fake_img_snap == 0:
+                utils.generate_and_save_images(out_dir, generator, epoch, self.noise_samples, self.colormode, show_graphs)
+            if epoch % model_snap == 0:
+                utils.save_checkpoint(out_dir, generator, self.optimizer_g, discriminator, self.optimizer_d, epoch)
 
         # Create loss graph
         utils.plot_loss_graph(discriminator_losses, generator_losses, out_dir, show_graphs)
