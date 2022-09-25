@@ -2,7 +2,7 @@
 # coding: utf-8
 
 # Note: This notebook was initially written following a tutorial from pytorch (https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html).
-
+import json
 import os
 from datetime import datetime
 from os import path
@@ -67,31 +67,32 @@ class Discriminator(nn.Module):
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(base_num_out_channels * 8, 1, kernel_size=(4, 4), stride=(1, 1), bias=False),
                 nn.Flatten(),
-                nn.Linear(1*3*1, 1)
+                nn.Linear(1 * 3 * 1, 1)
             )
         elif norm_layer_type == "spectral":
             self.main = nn.Sequential(
                 nn.utils.parametrizations.spectral_norm(
-                    nn.Conv2d(num_img_channels, base_num_out_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1),
-                          padding_mode=padding_mode, bias=False)),
+                    nn.Conv2d(num_img_channels, base_num_out_channels, kernel_size=(4, 4), stride=(2, 2),
+                              padding=(1, 1),
+                              padding_mode=padding_mode, bias=False)),
                 nn.LeakyReLU(0.1, inplace=True),
                 nn.utils.parametrizations.spectral_norm(
                     nn.Conv2d(base_num_out_channels, base_num_out_channels * 2, kernel_size=(4, 4), stride=(2, 2),
-                          padding=(1, 1), padding_mode=padding_mode, bias=False)),
+                              padding=(1, 1), padding_mode=padding_mode, bias=False)),
                 nn.LeakyReLU(0.1, inplace=True),
                 nn.utils.parametrizations.spectral_norm(
                     nn.Conv2d(base_num_out_channels * 2, base_num_out_channels * 4, kernel_size=(4, 4), stride=(2, 2),
-                          padding=(1, 1), padding_mode=padding_mode, bias=False)),
+                              padding=(1, 1), padding_mode=padding_mode, bias=False)),
                 nn.LeakyReLU(0.1, inplace=True),
                 nn.utils.parametrizations.spectral_norm(
                     nn.Conv2d(base_num_out_channels * 4, base_num_out_channels * 8, kernel_size=(4, 4), stride=(2, 2),
-                          padding=(1, 1), padding_mode=padding_mode, bias=False)),
+                              padding=(1, 1), padding_mode=padding_mode, bias=False)),
                 nn.LeakyReLU(0.1, inplace=True),
                 nn.utils.parametrizations.spectral_norm(
                     nn.Conv2d(base_num_out_channels * 8, 1, kernel_size=(4, 4), stride=(1, 1), bias=False)),
                 nn.LeakyReLU(0.1, inplace=True),
                 nn.Flatten(),
-                nn.Linear(1*3*1, 1)
+                nn.Linear(1 * 3 * 1, 1)
             )
         elif norm_layer_type == "layer":
             self.main = nn.Sequential(
@@ -133,7 +134,7 @@ class Discriminator(nn.Module):
                 nn.LeakyReLU(0.2, inplace=True),
                 nn.Conv2d(base_num_out_channels * 8, 1, kernel_size=(4, 4), stride=(1, 1), bias=False),
                 nn.Flatten(),
-                nn.Linear(1*3*1, 1)
+                nn.Linear(1 * 3 * 1, 1)
             )
         else:
             print("This layer norm is not implemented.")
@@ -165,16 +166,42 @@ class Trainer:
         self.optimizer_g = optim.Adam(g_params, lr=learning_rate, betas=(beta1, beta2))
 
     def train(self, generator, discriminator, dataloader, num_epochs, device, fake_img_snap,
-              model_snap, show_graphs=True):
+              model_snap, model_to_load=None, show_graphs=True):
 
         out_dir = path.join(self.out_dir, datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
         os.makedirs(out_dir)
         self.last_out_dir = out_dir
 
+        start_epoch = 0
+        parameters = {"out_dir": self.out_dir,
+                      "last_out_dir": self.last_out_dir,
+                      "colormode": self.colormode,
+                      "num_noise_vec_channels": self.num_noise_vec_channels,
+                      "image_size_ratio": self.image_size_ratio,
+                      "n_critic": self.n_critic,
+                      "lambda_gp": self.lambda_gp,
+                      "num_epochs": num_epochs,
+                      "fake_img_snap": fake_img_snap,
+                      "model_snap": model_snap,
+                      "model_to_load": model_to_load}
+
+        with open(out_dir + '/parameters.json', 'w') as file:
+            json.dump(parameters, file)
+
+        if model_to_load is not None:
+            checkpoint = torch.load(model_to_load)
+            generator.load_state_dict(checkpoint['generator_model_state_dict'])
+            generator.train()
+            discriminator.load_state_dict(checkpoint['discriminator_model_state_dict'])
+            discriminator.train()
+            self.optimizer_g.load_state_dict(checkpoint['generator_optimizer_state_dict'])
+            self.optimizer_d.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
+            start_epoch = checkpoint['epoch']
+
         generator_losses = []
         discriminator_losses = []
 
-        for epoch in range(num_epochs):
+        for epoch in range(start_epoch, (start_epoch + num_epochs)):
             for i, data in enumerate(pbar := tqdm(dataloader)):
                 # Sample images
                 reals = data[0].to(device)
@@ -216,7 +243,7 @@ class Trainer:
                     D_G_z2 = g_validity.mean().item()
 
                 pbar.set_description('[%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f' % (
-                    epoch, num_epochs - 1, d_loss.item(), g_loss.item(), D_x, D_G_z1, D_G_z2))
+                    epoch, start_epoch + num_epochs - 1, d_loss.item(), g_loss.item(), D_x, D_G_z1, D_G_z2))
                 generator_losses.append(g_loss.item())
                 discriminator_losses.append(d_loss.item())
 

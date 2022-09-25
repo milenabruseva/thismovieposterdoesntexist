@@ -2,18 +2,15 @@
 # coding: utf-8
 
 # Note: This notebook was initially written following a tutorial from pytorch (https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html).
-
+import json
 import os
-from os import path
-
 from datetime import datetime
-from tqdm import tqdm
+from os import path
 
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data
-
-import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import networks.utils as utils
 
@@ -96,7 +93,7 @@ class Discriminator(nn.Module):
                           padding_mode=padding_mode, bias=False)),
             nn.LeakyReLU(0.1, inplace=True),
             nn.Flatten(),
-            nn.Linear(in_features=2*3*1024, out_features=1),
+            nn.Linear(in_features=2 * 3 * 1024, out_features=1),
             nn.Sigmoid()
         )
 
@@ -160,16 +157,40 @@ class Trainer:
         self.fake_label = 0.
 
     def train(self, generator, discriminator, dataloader, num_epochs, device, fake_img_snap,
-              model_snap, show_graphs=True):
+              model_snap, model_to_load=None, show_graphs=True):
 
         out_dir = path.join(self.out_dir, datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
         os.makedirs(out_dir)
         self.last_out_dir = out_dir
 
+        start_epoch = 0
+        parameters = {"out_dir": self.out_dir,
+                      "last_out_dir": self.last_out_dir,
+                      "colormode": self.colormode,
+                      "num_noise_vec_channels": self.num_noise_vec_channels,
+                      "image_size_ratio": self.image_size_ratio,
+                      "num_epochs": num_epochs,
+                      "fake_img_snap": fake_img_snap,
+                      "model_snap": model_snap,
+                      "model_to_load": model_to_load}
+
+        with open(out_dir + '/parameters.json', 'w') as file:
+            json.dump(parameters, file)
+
+        if model_to_load is not None:
+            checkpoint = torch.load(model_to_load)
+            generator.load_state_dict(checkpoint['generator_model_state_dict'])
+            generator.train()
+            discriminator.load_state_dict(checkpoint['discriminator_model_state_dict'])
+            discriminator.train()
+            self.optimizer_g.load_state_dict(checkpoint['generator_optimizer_state_dict'])
+            self.optimizer_d.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
+            start_epoch = checkpoint['epoch']
+
         generator_losses = []
         discriminator_losses = []
 
-        for epoch in range(num_epochs):
+        for epoch in range(start_epoch, (start_epoch + num_epochs)):
             for i, data in enumerate(pbar := tqdm(dataloader)):
                 # Train Discriminator
                 # on reals
@@ -197,14 +218,14 @@ class Trainer:
                 generator.zero_grad()
                 labels.fill_(self.real_label)
                 g_output = discriminator(fakes).view(-1)
-                #g_error = self.loss_function(g_output, labels)
+                # g_error = self.loss_function(g_output, labels)
                 g_error = -torch.log(g_output).mean()
                 g_error.backward()
                 D_G_z2 = g_output.mean().item()
                 self.optimizer_g.step()
 
                 pbar.set_description('[%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f' % (
-                    epoch, num_epochs - 1, d_error.item(), g_error.item(), D_x, D_G_z1, D_G_z2))
+                    epoch, start_epoch + num_epochs - 1, d_error.item(), g_error.item(), D_x, D_G_z1, D_G_z2))
                 generator_losses.append(g_error.item())
                 discriminator_losses.append(d_error.item())
 
@@ -215,18 +236,7 @@ class Trainer:
                 utils.save_checkpoint(out_dir, generator, self.optimizer_g, discriminator, self.optimizer_d, epoch)
 
         # Create loss graph
-        fig = plt.figure(figsize=(10, 5))
-        plt.title("Generator and Discriminator Loss at End of Training")
-        plt.plot(generator_losses, label="Generator")
-        plt.plot(discriminator_losses, label="Discriminator")
-        plt.xlabel("Total Batch Iterations")
-        plt.ylabel("Loss")
-        plt.legend()
-        fig.savefig(path.join(out_dir, "training_loss.png"))
-        if show_graphs:
-            plt.show();
-        else:
-            plt.close();
+        utils.plot_loss_graph(discriminator_losses, generator_losses, out_dir, show_graphs)
 
         # Create gif
         utils.create_gif(out_dir)

@@ -2,7 +2,7 @@
 # coding: utf-8
 
 # Note: This notebook was initially written following a tutorial from pytorch (https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html).
-
+import json
 import os
 from datetime import datetime
 from os import path
@@ -172,16 +172,42 @@ class Trainer:
         self.fake_label = 0.
 
     def train(self, generator, discriminator, dataloader, num_epochs, device, num_features, sample_labels_generator,
-              fake_img_snap, model_snap, show_graphs=True):
+              fake_img_snap, model_snap, model_to_load, show_graphs=True):
 
         out_dir = path.join(self.out_dir, datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
         os.makedirs(out_dir)
         self.last_out_dir = out_dir
 
+        start_epoch = 0
+        parameters = {"out_dir": self.out_dir,
+                      "last_out_dir": self.last_out_dir,
+                      "colormode": self.colormode,
+                      "num_noise_vec_channels": self.num_noise_vec_channels,
+                      "image_size_ratio": self.image_size_ratio,
+                      "n_critic": self.n_critic,
+                      "lambda_gp": self.lambda_gp,
+                      "num_epochs": num_epochs,
+                      "fake_img_snap": fake_img_snap,
+                      "model_snap": model_snap,
+                      "model_to_load": model_to_load}
+
+        with open(out_dir + '/parameters.json', 'w') as file:
+            json.dump(parameters, file)
+
+        if model_to_load is not None:
+            checkpoint = torch.load(model_to_load)
+            generator.load_state_dict(checkpoint['generator_model_state_dict'])
+            generator.train()
+            discriminator.load_state_dict(checkpoint['discriminator_model_state_dict'])
+            discriminator.train()
+            self.optimizer_g.load_state_dict(checkpoint['generator_optimizer_state_dict'])
+            self.optimizer_d.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
+            start_epoch = checkpoint['epoch']
+
         generator_losses = []
         discriminator_losses = []
 
-        for epoch in range(num_epochs):
+        for epoch in range(start_epoch, (start_epoch + num_epochs)):
             for i, data in enumerate(pbar := tqdm(dataloader)):
                 # Train Discriminator
                 # on reals
@@ -225,7 +251,7 @@ class Trainer:
                     D_G_z2 = g_validity.mean().item()
 
                 pbar.set_description('[%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f' % (
-                    epoch, num_epochs - 1, d_loss.item(), g_loss.item(), D_x, D_G_z1, D_G_z2))
+                    epoch, start_epoch + num_epochs - 1, d_loss.item(), g_loss.item(), D_x, D_G_z1, D_G_z2))
                 generator_losses.append(g_loss.item())
                 discriminator_losses.append(d_loss.item())
 

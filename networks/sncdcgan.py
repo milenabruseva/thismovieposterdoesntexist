@@ -2,7 +2,7 @@
 # coding: utf-8
 
 # Note: This notebook was initially written following a tutorial from pytorch (https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html).
-
+import json
 import os
 from datetime import datetime
 from os import path
@@ -58,21 +58,28 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, num_img_channels, num_feature_vec_channels, base_num_out_channels, padding_mode):
         super(Discriminator, self).__init__()
-        self.conv1_1 = nn.utils.parametrizations.spectral_norm(nn.Conv2d(num_img_channels, base_num_out_channels, kernel_size=(4, 4), stride=(2, 2),
-                                 padding=(1, 1), bias=False, padding_mode=padding_mode))
-        self.conv1_2 = nn.utils.parametrizations.spectral_norm(nn.Conv2d(num_feature_vec_channels, base_num_out_channels, kernel_size=(4, 4), stride=(2, 2),
-                                 padding=(1, 1), bias=False, padding_mode=padding_mode))
+        self.conv1_1 = nn.utils.parametrizations.spectral_norm(
+            nn.Conv2d(num_img_channels, base_num_out_channels, kernel_size=(4, 4), stride=(2, 2),
+                      padding=(1, 1), bias=False, padding_mode=padding_mode))
+        self.conv1_2 = nn.utils.parametrizations.spectral_norm(
+            nn.Conv2d(num_feature_vec_channels, base_num_out_channels, kernel_size=(4, 4), stride=(2, 2),
+                      padding=(1, 1), bias=False, padding_mode=padding_mode))
 
-        self.conv2 = nn.utils.parametrizations.spectral_norm(nn.Conv2d(base_num_out_channels * 2, base_num_out_channels * 4, kernel_size=(4, 4), stride=(2, 2),
-                               padding=(1, 1), bias=False, padding_mode=padding_mode))
+        self.conv2 = nn.utils.parametrizations.spectral_norm(
+            nn.Conv2d(base_num_out_channels * 2, base_num_out_channels * 4, kernel_size=(4, 4), stride=(2, 2),
+                      padding=(1, 1), bias=False, padding_mode=padding_mode))
 
-        self.conv3 = nn.utils.parametrizations.spectral_norm(nn.Conv2d(base_num_out_channels * 4, base_num_out_channels * 8, kernel_size=(4, 4), stride=(2, 2),
-                               padding=(1, 1), bias=False, padding_mode=padding_mode))
+        self.conv3 = nn.utils.parametrizations.spectral_norm(
+            nn.Conv2d(base_num_out_channels * 4, base_num_out_channels * 8, kernel_size=(4, 4), stride=(2, 2),
+                      padding=(1, 1), bias=False, padding_mode=padding_mode))
 
-        self.conv4 = nn.utils.parametrizations.spectral_norm(nn.Conv2d(base_num_out_channels * 8, base_num_out_channels * 16, kernel_size=(4, 4), stride=(2, 2),
-                               padding=(1, 1), bias=False, padding_mode=padding_mode))
-        self.conv5 = nn.utils.parametrizations.spectral_norm(nn.Conv2d(base_num_out_channels * 16, 1, kernel_size=(4, 4), stride=(1, 1), bias=False))
-        self.conv6 = nn.utils.parametrizations.spectral_norm(nn.Conv2d(1, 1, kernel_size=(3, 1), stride=(1, 1), bias=False))
+        self.conv4 = nn.utils.parametrizations.spectral_norm(
+            nn.Conv2d(base_num_out_channels * 8, base_num_out_channels * 16, kernel_size=(4, 4), stride=(2, 2),
+                      padding=(1, 1), bias=False, padding_mode=padding_mode))
+        self.conv5 = nn.utils.parametrizations.spectral_norm(
+            nn.Conv2d(base_num_out_channels * 16, 1, kernel_size=(4, 4), stride=(1, 1), bias=False))
+        self.conv6 = nn.utils.parametrizations.spectral_norm(
+            nn.Conv2d(1, 1, kernel_size=(3, 1), stride=(1, 1), bias=False))
 
     def forward(self, input, label):
         x = F.leaky_relu(self.conv1_1(input), 0.2)
@@ -108,18 +115,44 @@ class Trainer:
         self.real_label = 1.
         self.fake_label = 0.
 
-    def train(self, generator, discriminator, dataloader, num_epochs, device, num_features, sample_labels_generator,
+    def train(self, generator, discriminator, dataloader, num_epochs, device, fake_img_snap, model_snap, num_features,
+              sample_labels_generator,
+              model_to_load,
               show_graphs=True):
 
         out_dir = path.join(self.out_dir, datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
         os.makedirs(out_dir)
         self.last_out_dir = out_dir
 
+        start_epoch = 0
+        parameters = {"out_dir": self.out_dir,
+                      "last_out_dir": self.last_out_dir,
+                      "colormode": self.colormode,
+                      "num_noise_vec_channels": self.num_noise_vec_channels,
+                      "image_size_ratio": self.image_size_ratio,
+                      "num_epochs": num_epochs,
+                      "fake_img_snap": fake_img_snap,
+                      "model_snap": model_snap,
+                      "model_to_load": model_to_load}
+
+        with open(out_dir + '/parameters.json', 'w') as file:
+            json.dump(parameters, file)
+
+        if model_to_load is not None:
+            checkpoint = torch.load(model_to_load)
+            generator.load_state_dict(checkpoint['generator_model_state_dict'])
+            generator.train()
+            discriminator.load_state_dict(checkpoint['discriminator_model_state_dict'])
+            discriminator.train()
+            self.optimizer_g.load_state_dict(checkpoint['generator_optimizer_state_dict'])
+            self.optimizer_d.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
+            start_epoch = checkpoint['epoch']
+
         generator_losses = []
         discriminator_losses = []
         discriminator_steps = 2
 
-        for epoch in range(num_epochs):
+        for epoch in range(start_epoch, (start_epoch + num_epochs)):
             for i, data in enumerate(pbar := tqdm(dataloader)):
                 # Train Discriminator
                 # on reals
@@ -163,7 +196,7 @@ class Trainer:
                 self.optimizer_g.step()
 
                 pbar.set_description('[%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f' % (
-                    epoch, num_epochs - 1, d_error.item(), g_error.item(), D_x, D_G_z1, D_G_z2))
+                    epoch, start_epoch + num_epochs - 1, d_error.item(), g_error.item(), D_x, D_G_z1, D_G_z2))
                 generator_losses.append(g_error.item())
                 discriminator_losses.append(d_error.item())
 

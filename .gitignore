@@ -137,3 +137,4 @@ data-celebs/
 *.png
 *.gif
 .idea/
+output-runs/

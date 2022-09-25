@@ -99,8 +99,8 @@ def create_gif(directory):
 def save_checkpoint(output_dir, generator_network, optimizer_generator, discriminator_network, optimizer_discriminator,
                     epoch):
     """
-    The save_checkpoint function saves the model's state dictionary, optimizer state dictionary, and current epoch number
-    in a checkpoint file.
+    The save_checkpoint function saves the model's state dictionary, optimizer state dictionary,
+    and current epoch number in a checkpoint file.
 
     :param output_dir: Specify the path to the directory where we want to save our model
     :param generator_network: Generator model to save
@@ -142,7 +142,7 @@ def plot_loss_graph(discriminator_losses, generator_losses, out_dir, show_graphs
         plt.close();
 
 
-def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey):
+def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey, output):
     """
     The plot_grid function takes a generator, noise vector size, device and seed as input.
     It then creates a grid of images using the generator.
@@ -155,6 +155,7 @@ def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey):
     :param seed: Set the random seed for reproducibility
     :param sizex: Set the width of the figure
     :param sizey: Set the size of the figure
+    :param output: Where to save the figure
     """
     number_of_samples = 1
     genres = {"is_thriller": 0, "is_horror": 0, "is_animation": 0, "is_scifi": 0,
@@ -194,7 +195,41 @@ def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey):
     plt.axis("off")
     plt.imshow(np.transpose(img, (1, 2, 0)))
     plt.show()
-    fig.savefig("" + "image.png")
+    fig.savefig(output)
+
+
+def plot_reals_vs_fakes(generator, trainer, sample_reals, num_samples, output, device, sample_labels_generator=None):
+    """
+    The plot_reals_vs_fakes generates num_samples fake images using the generator and
+    plots them against the real images from sample_reals.
+    The function also saves the plot.
+
+    :param generator: Generator to use
+    :param trainer: Access the saved noise_samples of the trainer
+    :param sample_reals: Pass in the real images that are used for comparison
+    :param num_samples: Determine how many images to show in the plot
+    :param output: Specify the location of the output image
+    :param device: Tell torch which device (cpu or gpu) to use
+    :param sample_labels_generator: Specify when we want to generate images using a conditional generator
+    """
+    with torch.no_grad():
+        if sample_labels_generator is None:
+            sample_fakes = generator(trainer.noise_samples).detach().cpu()
+        else:
+            sample_fakes = generator(trainer.noise_samples, sample_labels_generator).detach().cpu()
+    sample_fakes = vutils.make_grid(sample_fakes, padding=5, normalize=True)
+    fig = plt.figure(figsize=(15, 15))
+    plt.subplot(1, 2, 1)
+    plt.axis("off")
+    plt.title("Real Images")
+    plt.imshow(np.transpose(vutils.make_grid(sample_reals[0].to(device)[:num_samples], padding=5, normalize=True).cpu(),
+                            (1, 2, 0)))
+    plt.subplot(1, 2, 2)
+    plt.axis("off")
+    plt.title("Fake Images")
+    plt.imshow(np.transpose(sample_fakes, (1, 2, 0)))
+    plt.show()
+    fig.savefig(output)
 
 
 def init_weights(m):
