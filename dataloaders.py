@@ -1,12 +1,9 @@
 import os
 
-import torch
-import torchvision
-from torchvision import transforms
-
 import pandas as pd
-
+import torch
 from PIL import Image
+from torchvision import transforms
 
 img_transform_train = transforms.Compose([...])
 
@@ -113,7 +110,9 @@ class PosterDataset(torch.utils.data.Dataset):
 
         _, _, _, og_lang, pop, _, runtime, vote_count, _, _, is_thriller, is_horror, is_animation, is_scifi, is_action, \
         is_drama, is_fantasy, is_adventure, is_family, is_comedy, is_tv, is_crime, is_mystery, is_war, is_romance, \
-        is_music, is_history, is_docu, is_western, year, _ = self.table.iloc[[idx]].values.flatten()
+        is_music, is_history, is_docu, is_western, lang_ar, lang_cn, lang_de, lang_el, lang_en, lang_es, lang_fr, \
+        lang_hi, lang_it, lang_ja, lant_ko, lang_other, lang_pt, lang_ru, lang_sv, lang_tl, lang_tr, \
+        lang_zh, year, _ = self.table.iloc[[idx]].values.flatten()
 
         if self.img_in_ram:
             image = self.images[idx]
@@ -124,7 +123,9 @@ class PosterDataset(torch.utils.data.Dataset):
 
         return image, og_lang, pop, year, runtime, vote_count, is_thriller, is_horror, is_animation, is_scifi, is_action, \
                is_drama, is_fantasy, is_adventure, is_family, is_comedy, is_tv, is_crime, is_mystery, is_war, \
-               is_romance, is_music, is_history, is_docu, is_western
+               is_romance, is_music, is_history, is_docu, is_western, lang_ar, lang_cn, lang_de, lang_el, lang_en, \
+               lang_es, lang_fr, lang_hi, lang_it, lang_ja, lant_ko, lang_other, lang_pt, lang_ru, lang_sv, \
+               lang_tl, lang_tr, lang_zh
 
 
 def pil_loader(path: str, colormode="RGB") -> Image.Image:
