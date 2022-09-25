@@ -4,18 +4,15 @@
 # Note: This notebook was initially written following a tutorial from pytorch (https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html).
 
 import os
-from os import path
-
 from datetime import datetime
-from tqdm import tqdm
+from os import path
 
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data
+from tqdm import tqdm
 
-import matplotlib.pyplot as plt
-
-import utils
+import networks.utils as utils
 
 
 # ----------
@@ -152,18 +149,7 @@ class Trainer:
             utils.save_checkpoint(out_dir, generator, self.optimizer_g, discriminator, self.optimizer_d, epoch)
 
         # Create loss graph
-        fig = plt.figure(figsize=(10, 5))
-        plt.title("Generator and Discriminator Loss at End of Training")
-        plt.plot(generator_losses, label="Generator")
-        plt.plot(discriminator_losses, label="Discriminator")
-        plt.xlabel("Total Batch Iterations")
-        plt.ylabel("Loss")
-        plt.legend()
-        fig.savefig(path.join(out_dir, "training_loss.png"))
-        if show_graphs:
-            plt.show();
-        else:
-            plt.close();
+        utils.plot_loss_graph(discriminator_losses, generator_losses, out_dir, show_graphs)
 
         # Create gif
         utils.create_gif(out_dir)
@@ -173,21 +159,12 @@ class Trainer:
 #  Initialization
 # ---------------
 
-def init_weights(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.02)
-        nn.init.constant_(m.bias.data, 0)
-
-
 def create_gan(num_img_channels, num_noise_vec_channels, base_num_out_channels_g, base_num_out_channels_d,
                padding_mode, device):
     generator = Generator(num_noise_vec_channels, base_num_out_channels_g, num_img_channels).to(device)
     discriminator = Discriminator(num_img_channels, base_num_out_channels_d, padding_mode).to(device)
-    generator.apply(init_weights)
-    discriminator.apply(init_weights)
+    generator.apply(utils.init_weights)
+    discriminator.apply(utils.init_weights)
 
     return generator, discriminator
 
