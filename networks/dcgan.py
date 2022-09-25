@@ -20,57 +20,75 @@ import networks.utils as utils
 # ----------
 
 class Generator(nn.Module):
-    def __init__(self, num_noise_vec_channels, base_num_out_channels, num_img_channels):
+    def __init__(self, num_noise_vec_channels, base_num_out_channels, img_size, num_img_channels):
         super(Generator, self).__init__()
-        self.main = nn.Sequential(
-            nn.ConvTranspose2d(num_noise_vec_channels, base_num_out_channels * 8, kernel_size=(4, 4), stride=(1, 1),
-                               bias=False),
-            nn.BatchNorm2d(base_num_out_channels * 8),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(base_num_out_channels * 8, base_num_out_channels * 4, kernel_size=(4, 4),
-                               stride=(2, 2), padding=(1, 1), bias=False),
-            nn.BatchNorm2d(base_num_out_channels * 4),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(base_num_out_channels * 4, base_num_out_channels * 2, kernel_size=(4, 4),
-                               stride=(2, 2), padding=(1, 1), bias=False),
-            nn.BatchNorm2d(base_num_out_channels * 2),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(base_num_out_channels * 2, base_num_out_channels, kernel_size=(4, 4), stride=(2, 2),
-                               padding=(1, 1), bias=False),
-            nn.BatchNorm2d(base_num_out_channels),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(base_num_out_channels, num_img_channels, kernel_size=(4, 4), stride=(2, 2),
-                               padding=(1, 1), bias=False),
-            nn.Tanh()
-        )
+
+        factor = img_size // 8
+
+        modules = [*self._FromLatent(num_noise_vec_channels, base_num_out_channels * factor)]
+
+        while factor > 1:
+            modules.extend(self._Block(base_num_out_channels * factor, base_num_out_channels * (factor // 2)))
+            factor //= 2
+        modules.extend(self._ToImage(base_num_out_channels, num_img_channels))
+
+        self.main = nn.Sequential(*modules)
+
+    def _FromLatent(self, num_lat_chan, num_out_chan):
+        return nn.ConvTranspose2d(num_lat_chan, num_out_chan, kernel_size=4, stride=1, bias=False), \
+               nn.BatchNorm2d(num_out_chan), \
+               nn.ReLU(True)
+
+    def _Block(self, num_in_chan, num_out_chan):
+        return nn.ConvTranspose2d(num_in_chan, num_out_chan, kernel_size=4, stride=2, padding=1, bias=False), \
+               nn.BatchNorm2d(num_out_chan), \
+               nn.ReLU(True)
+
+    def _ToImage(self, num_in_chan, num_img_chan):
+        return nn.ConvTranspose2d(num_in_chan, num_img_chan, kernel_size=4, stride=2, padding=(1, 1), bias=False), \
+               nn.Tanh()
 
     def forward(self, input):
         return self.main(input)
 
 
 class Discriminator(nn.Module):
-    def __init__(self, num_img_channels, base_num_out_channels, padding_mode):
+    def __init__(self, img_size, img_ratio, num_img_channels, base_num_out_channels, padding_mode):
         super(Discriminator, self).__init__()
-        self.main = nn.Sequential(
-            nn.Conv2d(num_img_channels, base_num_out_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1),
-                      padding_mode=padding_mode, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(base_num_out_channels, base_num_out_channels * 2, kernel_size=(4, 4), stride=(2, 2),
-                      padding=(1, 1), padding_mode=padding_mode, bias=False),
-            nn.BatchNorm2d(base_num_out_channels * 2),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(base_num_out_channels * 2, base_num_out_channels * 4, kernel_size=(4, 4), stride=(2, 2),
-                      padding=(1, 1), padding_mode=padding_mode, bias=False),
-            nn.BatchNorm2d(base_num_out_channels * 4),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(base_num_out_channels * 4, base_num_out_channels * 8, kernel_size=(4, 4), stride=(2, 2),
-                      padding=(1, 1), padding_mode=padding_mode, bias=False),
-            nn.BatchNorm2d(base_num_out_channels * 8),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(base_num_out_channels * 8, 1, kernel_size=(4, 4), stride=(1, 1), bias=False),
-            nn.Conv2d(1, 1, kernel_size=(3, 1), stride=(1, 1), bias=False),
-            nn.Sigmoid()
-        )
+
+        max_factor = img_size // 8
+
+        modules = [*self._FromImage(num_img_channels, base_num_out_channels, padding_mode, leakiness=0.2)]
+
+        factor = 1
+        while factor < max_factor:
+            modules.extend(self._Block(base_num_out_channels * factor, base_num_out_channels * factor * 2,
+                                       padding_mode, leakiness=0.2))
+            factor *= 2
+        modules.extend(self._Output(base_num_out_channels * factor, img_ratio))
+
+        self.main = nn.Sequential(*modules)
+
+    def _FromImage(self, num_img_chan, num_out_chan, padding_mode, leakiness):
+        return nn.Conv2d(num_img_chan, num_out_chan, kernel_size=4, stride=2,
+                         padding=1, padding_mode=padding_mode, bias=False), \
+               nn.LeakyReLU(leakiness, inplace=True)
+
+    def _Block(self, num_in_chan, num_out_chan, padding_mode, leakiness):
+        return nn.Conv2d(num_in_chan, num_out_chan, kernel_size=4,
+                         stride=2, padding=1, padding_mode=padding_mode, bias=False), \
+               nn.BatchNorm2d(num_out_chan), \
+               nn.LeakyReLU(leakiness, inplace=True),
+
+    def _Output(self, num_in_chan, img_ratio):
+        if img_ratio > 1:
+            return nn.Conv2d(num_in_chan, 1, kernel_size=4, stride=1, bias=False), \
+                   nn.Flatten(), \
+                   nn.Linear(in_features=1 * img_ratio * 1, out_features=1), \
+                   nn.Sigmoid()
+        else:
+            return nn.Conv2d(num_in_chan, 1, kernel_size=4, stride=1, bias=False), \
+                   nn.Sigmoid()
 
     def forward(self, input):
         return self.main(input)
@@ -147,7 +165,8 @@ class Trainer:
                 discriminator_losses.append(d_error.item())
 
             if epoch % fake_img_snap == 0:
-                utils.generate_and_save_images(out_dir, generator, epoch, self.noise_samples, self.colormode, show_graphs)
+                utils.generate_and_save_images(out_dir, generator, epoch, self.noise_samples, self.colormode,
+                                               show_graphs)
             if epoch % model_snap == 0:
                 utils.save_checkpoint(out_dir, generator, self.optimizer_g, discriminator, self.optimizer_d, epoch)
 
@@ -162,10 +181,11 @@ class Trainer:
 #  Initialization
 # ---------------
 
-def create_gan(num_img_channels, num_noise_vec_channels, base_num_out_channels_g, base_num_out_channels_d,
-               padding_mode, device):
-    generator = Generator(num_noise_vec_channels, base_num_out_channels_g, num_img_channels).to(device)
-    discriminator = Discriminator(num_img_channels, base_num_out_channels_d, padding_mode).to(device)
+def create_gan(img_size, img_ratio, num_img_channels, num_noise_vec_channels, base_num_out_channels_g,
+               base_num_out_channels_d, padding_mode, device):
+    generator = Generator(num_noise_vec_channels, base_num_out_channels_g, img_size, num_img_channels).to(device)
+    discriminator = Discriminator(img_size, img_ratio, num_img_channels,
+                                  base_num_out_channels_d, padding_mode).to(device)
     generator.apply(utils.init_weights)
     discriminator.apply(utils.init_weights)
 
