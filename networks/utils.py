@@ -142,7 +142,7 @@ def plot_loss_graph(discriminator_losses, generator_losses, out_dir, show_graphs
         plt.close();
 
 
-def plot_grid(generator, noise_vector_size, device, seed):
+def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey):
     """
     The plot_grid function takes a generator, noise vector size, device and seed as input.
     It then creates a grid of images using the generator.
@@ -151,8 +151,10 @@ def plot_grid(generator, noise_vector_size, device, seed):
 
     :param generator: Generator to use
     :param noise_vector_size: Size of the noise vector
-    :param device: Specify whether you want to run on a cpu or gpu
+    :param device: Specify whether you want to run the model on a cpu or gpu
     :param seed: Set the random seed for reproducibility
+    :param sizex: Set the width of the figure
+    :param sizey: Set the size of the figure
     """
     number_of_samples = 1
     genres = {"is_thriller": 0, "is_horror": 0, "is_animation": 0, "is_scifi": 0,
@@ -188,7 +190,7 @@ def plot_grid(generator, noise_vector_size, device, seed):
     with torch.no_grad():
         images = generator(noise, samples).detach().cpu()
     img = vutils.make_grid(images, nrow=len(languages), padding=2, normalize=True)
-    fig = plt.figure(figsize=(20, 30))
+    fig = plt.figure(figsize=(sizex, sizey))
     plt.axis("off")
     plt.imshow(np.transpose(img, (1, 2, 0)))
     plt.show()
