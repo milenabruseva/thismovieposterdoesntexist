@@ -9,6 +9,8 @@ import torchvision.utils as vutils
 from PIL import Image
 from matplotlib.colors import hsv_to_rgb
 from torch import nn
+from torchmetrics.image import KernelInceptionDistance
+from tqdm import tqdm
 
 
 def sample_posters(dataloader, number_of_samples, colormode, device):
@@ -245,3 +247,37 @@ def init_weights(m):
     elif classname.find('BatchNorm') != -1:
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
+
+
+def compute_kid_score(generator, posterloader, mode, iterations, subset_size,
+                      num_noise_vec_channels, img_size_ratio, num_feature_vec_channels, device):
+    stats = []
+    for i in tqdm(range(iterations)):
+        kid = KernelInceptionDistance(subset_size=subset_size)
+        data = next(iter(posterloader))
+        imgs_dist1 = data[0].type(torch.uint8).to(device)
+        if mode == "random":
+            imgs_dist2 = torch.randint(0, 255, size=(subset_size, 3, 96, 64), dtype=torch.uint8).to(device)
+        elif mode == "same":
+            imgs_dist2 = next(iter(posterloader))[0].type(torch.uint8).to(device)
+        elif mode == "generated":
+            noise = torch.randn(subset_size, num_noise_vec_channels, img_size_ratio, 1, device=device)
+            if num_feature_vec_channels is not None:
+                input_features = torch.stack(data[6:43], dim=1).type(torch.FloatTensor).to(device)
+                input_features_generator = input_features[:, :, None, None].expand(subset_size, num_feature_vec_channels, 3,
+                                                                               1).to(device)
+                imgs_dist2 = generator(noise, input_features_generator).type(torch.uint8).to(device)
+            else:
+                imgs_dist2 = generator(noise).type(torch.uint8).to(device)
+        else:
+            print("Mode not supported.")
+            break
+        imgs_dist1 = imgs_dist1.to("cpu")
+        imgs_dist2 = imgs_dist2.to("cpu")
+        kid.update(imgs_dist1, real=True)
+        kid.update(imgs_dist2, real=False)
+        kid_mean, kid_std = kid.compute()
+        stats.append((kid_mean, kid_std))
+    mean = sum([stat[0] for stat in stats]) / float(iterations)
+    mean_std = sum([stat[1] for stat in stats]) / float(iterations)
+    print("Mode: " + mode + " | Mean: " + str(mean.item()) + " | Std: " + str(mean_std.item()))
