@@ -11,6 +11,7 @@ from matplotlib.colors import hsv_to_rgb
 from torch import nn
 from torchmetrics.image import KernelInceptionDistance
 from tqdm import tqdm
+import pickle
 
 
 def sample_posters(dataloader, number_of_samples, colormode, device):
@@ -142,6 +143,9 @@ def plot_loss_graph(discriminator_losses, generator_losses, out_dir, show_graphs
         plt.show();
     else:
         plt.close();
+    losses = {"g_losses": generator_losses, "d_losses": discriminator_losses}
+    with open(path.join(out_dir, "losses.pkl"), 'wb') as f:
+        pickle.dump(losses, f)
 
 
 def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey, output):
