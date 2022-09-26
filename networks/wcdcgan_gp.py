@@ -223,7 +223,7 @@ class Trainer:
 
                 fakes = generator(noise, input_features_generator)
                 d_real = discriminator(reals, input_features_discriminator).view(-1)
-                d_fake = discriminator(fakes, input_features_discriminator).view(-1)
+                d_fake = discriminator(fakes.detach(), input_features_discriminator).view(-1)
 
                 grad_penalty = gradient_penalty(discriminator, reals, fakes, input_features_discriminator,
                                                 device=device)
