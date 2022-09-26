@@ -54,8 +54,8 @@ def generate_and_save_images(output_dir, generator, epoch, noise, colormode, sho
     :param epoch: Specify the number of epochs that have been performed
     :param noise: Noise to be passed to the generator
     :param colormode: Determine which colormode to use for the image visualization
-    :param show=True: Plot the image
-    :param sample_labels_generator=None: Use if model is conditional
+    :param show: Plot the image
+    :param sample_labels_generator: Use if model is conditional
     """
     with torch.no_grad():
         if sample_labels_generator is None:
