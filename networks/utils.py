@@ -5,6 +5,8 @@ from os import path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from torch.nn import init
+from torch import empty
 import torchvision.utils as vutils
 from PIL import Image
 from matplotlib.colors import hsv_to_rgb
@@ -147,8 +149,7 @@ def plot_loss_graph(discriminator_losses, generator_losses, out_dir, show_graphs
     with open(path.join(out_dir, "losses.pkl"), 'wb') as f:
         pickle.dump(losses, f)
 
-
-def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey, output):
+def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey, output, genres_to_choose=None, languages_to_choose=None, trunc_theshold=0.1):
     """
     The plot_grid function takes a generator, noise vector size, device and seed as input.
     It then creates a grid of images using the generator.
@@ -162,6 +163,8 @@ def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey, output):
     :param sizex: Set the width of the figure
     :param sizey: Set the size of the figure
     :param output: Where to save the figure
+    :param genres_to_choose: optional, whether to only plot specific genres
+    :param languages_to_choose: optional, whether to only plot specific languages
     """
     number_of_samples = 1
     genres = {"is_thriller": 0, "is_horror": 0, "is_animation": 0, "is_scifi": 0,
@@ -176,10 +179,14 @@ def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey, output):
                  "lang_tr": 0, "lang_zh": 0}
 
     samples = []
-    for genre in genres:
+    if genres_to_choose is None or languages_to_choose is None:
+        genres_to_choose = genres.copy()
+        languages_to_choose = languages.copy()
+
+    for genre in genres_to_choose:
         current_genres = genres.copy()
         current_genres[genre] = 1
-        for language in languages:
+        for language in languages_to_choose:
             current_languages = languages.copy()
             current_languages[language] = 1
             features = current_genres | current_languages
@@ -189,14 +196,17 @@ def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey, output):
                 feature_vectors[:, :, None, None].expand(number_of_samples, len(features), 3, 1).to(device))
 
     samples = torch.reshape(torch.stack(samples, dim=1),
-                            (len(genres) * len(languages), len(genres) + len(languages), 3, 1))
+                            (len(genres_to_choose) * len(languages_to_choose), len(genres) + len(languages), 3, 1))
     random.seed(seed)
     torch.manual_seed(seed)
-    noise = torch.randn(1, noise_vector_size, 3, 1, device=device)
-    noise = noise.expand(len(genres) * len(languages), noise_vector_size, 3, 1).to(device)
+    if trunc_theshold is not None:
+        noise = init.trunc_normal_(empty(number_of_samples, noise_vector_size, 3, 1, device=device), a=-trunc_theshold, b=trunc_theshold)
+    else:
+        noise = torch.randn(1, noise_vector_size, 3, 1, device=device)
+    noise = noise.expand(len(genres_to_choose) * len(languages_to_choose), noise_vector_size, 3, 1).to(device)
     with torch.no_grad():
         images = generator(noise, samples).detach().cpu()
-    img = vutils.make_grid(images, nrow=len(languages), padding=2, normalize=True)
+    img = vutils.make_grid(images, nrow=len(languages_to_choose), padding=2, normalize=True)
     fig = plt.figure(figsize=(sizex, sizey))
     plt.axis("off")
     plt.imshow(np.transpose(img, (1, 2, 0)))
@@ -254,10 +264,9 @@ def init_weights(m):
 
 
 def compute_kid_score(generator, posterloader, mode, iterations, subset_size,
-                      num_noise_vec_channels, img_size_ratio, num_feature_vec_channels, device):
+                      num_noise_vec_channels, img_size_ratio, device, num_feature_vec_channels=None):
     stats = []
     for i in tqdm(range(iterations)):
-        kid = KernelInceptionDistance(subset_size=subset_size)
         data = next(iter(posterloader))
         imgs_dist1 = data[0].type(torch.uint8).to(device)
         if mode == "random":
@@ -268,16 +277,16 @@ def compute_kid_score(generator, posterloader, mode, iterations, subset_size,
             noise = torch.randn(subset_size, num_noise_vec_channels, img_size_ratio, 1, device=device)
             if num_feature_vec_channels is not None:
                 input_features = torch.stack(data[6:43], dim=1).type(torch.FloatTensor).to(device)
-                input_features_generator = input_features[:, :, None, None].expand(subset_size, num_feature_vec_channels, 3,
-                                                                               1).to(device)
+                input_features_generator = input_features[:, :, None, None].expand(subset_size,
+                                                                                   num_feature_vec_channels, 3,
+                                                                                   1).to(device)
                 imgs_dist2 = generator(noise, input_features_generator).type(torch.uint8).to(device)
             else:
                 imgs_dist2 = generator(noise).type(torch.uint8).to(device)
         else:
             print("Mode not supported.")
             break
-        imgs_dist1 = imgs_dist1.to("cpu")
-        imgs_dist2 = imgs_dist2.to("cpu")
+        kid = KernelInceptionDistance(subset_size=subset_size).to(device)
         kid.update(imgs_dist1, real=True)
         kid.update(imgs_dist2, real=False)
         kid_mean, kid_std = kid.compute()
@@ -285,3 +294,4 @@ def compute_kid_score(generator, posterloader, mode, iterations, subset_size,
     mean = sum([stat[0] for stat in stats]) / float(iterations)
     mean_std = sum([stat[1] for stat in stats]) / float(iterations)
     print("Mode: " + mode + " | Mean: " + str(mean.item()) + " | Std: " + str(mean_std.item()))
+    return mean.item(), mean_std.item()
