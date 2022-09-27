@@ -5,6 +5,7 @@ from os import path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from numpy import asarray
 from torch.nn import init
 from torch import empty
 import torchvision.utils as vutils
@@ -12,6 +13,7 @@ from PIL import Image
 from matplotlib.colors import hsv_to_rgb
 from torch import nn
 from torchmetrics.image import KernelInceptionDistance
+from torchvision.transforms.functional import to_pil_image
 from tqdm import tqdm
 import pickle
 
@@ -206,12 +208,16 @@ def plot_grid(generator, noise_vector_size, device, seed, sizex, sizey, output, 
     noise = noise.expand(len(genres_to_choose) * len(languages_to_choose), noise_vector_size, 3, 1).to(device)
     with torch.no_grad():
         images = generator(noise, samples).detach().cpu()
-    img = vutils.make_grid(images, nrow=len(languages_to_choose), padding=2, normalize=True)
-    fig = plt.figure(figsize=(sizex, sizey))
-    plt.axis("off")
-    plt.imshow(np.transpose(img, (1, 2, 0)))
-    plt.show()
-    fig.savefig(output)
+    images = vutils.make_grid(images, nrow=len(languages_to_choose), padding=2, normalize=True)
+    if not isinstance(images, list):
+        images = [images]
+    fig, axs = plt.subplots(figsize=(sizex, sizey), ncols=len(images), squeeze=False)
+    for i, img in enumerate(images):
+        img = img.detach()
+        img = to_pil_image(img)
+        axs[0, i].imshow(asarray(img))
+        axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
+    fig.savefig(path.join(output))
 
 
 def plot_reals_vs_fakes(generator, trainer, sample_reals, num_samples, output, device, sample_labels_generator=None):
