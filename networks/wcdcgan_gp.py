@@ -261,8 +261,8 @@ class Trainer:
             if epoch % model_snap == 0:
                 utils.save_checkpoint(out_dir, generator, self.optimizer_g, discriminator, self.optimizer_d, epoch)
 
-        # Create loss graph
-        utils.plot_loss_graph(discriminator_losses, generator_losses, out_dir, show_graphs)
+            # Create loss graph
+            utils.plot_loss_graph(discriminator_losses, generator_losses, out_dir, show_graphs)
         # Create gif
         utils.create_gif(out_dir)
 
